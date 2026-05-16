@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 1.7.0"
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -12,7 +13,11 @@ provider "azurerm" {
   features {}
 }
 
-resource "azurerm_resource_group" "lab" {
-  name     = "rg-outbox-saga-lab"
-  location = "eastus"
+data "azurerm_resource_group" "lab" {
+  name = var.resource_group_name
+}
+
+data "azurerm_cosmosdb_account" "lab" {
+  name                = var.cosmos_account_name
+  resource_group_name = data.azurerm_resource_group.lab.name
 }
