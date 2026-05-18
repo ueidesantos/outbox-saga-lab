@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/Infra/">
+    <File Path="infra1/.gitigonre" />
+    <File Path="infra1/.terraform.lock.hcl" />
+    <File Path="infra1/down.ps1" />
+    <File Path="infra1/main.tf" />
+    <File Path="infra1/outputs.tf" />
+    <File Path="infra1/terraform.tfstate" />
+    <File Path="infra1/terraform.tfstate.backup" />
+    <File Path="infra1/terraform.tfvars" />
+    <File Path="infra1/tfplan" />
+    <File Path="infra1/up.ps1" />
+    <File Path="infra1/variables.tf" />
+  </Folder>
+  <Folder Name="/Order/">
+    <Project Path="src/OutboxSaga.Order/OutboxSaga.Order.Api/OutboxSaga.Order.Api.csproj" />
+    <Project Path="src/OutboxSaga.Order/OutboxSaga.Order.Application/OutboxSaga.Order.Application.csproj" />
+    <Project Path="src/OutboxSaga.Order/OutboxSaga.Order.Domain/OutboxSaga.Order.Domain.csproj" />
+    <Project Path="src/OutboxSaga.Order/OutboxSaga.Order.Infrastructure/OutboxSaga.Order.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Payment/" />
+  <Folder Name="/Shipping/" />
+</Solution>
