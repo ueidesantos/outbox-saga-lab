@@ -1,9 +1,10 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using OutboxSaga.Domain.Pedidos;
-using OutboxSaga.Infrastructure.Data;
-using OutboxSaga.Infrastructure.Pedidos;
+using MongoDB.Driver;
+using OutboxSaga.Orders.Application.Abstractions.Messaging;
+using OutboxSaga.Orders.Application.Abstractions.Persistence;
+using OutboxSaga.Orders.Infrastructure.Persistence;
+using OutboxSaga.Orders.Infrastructure.Persistence.Repositories;
 
 namespace OutboxSaga.Infrastructure;
 
@@ -13,16 +14,29 @@ public static class InfrastructureServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var cosmosSection = configuration.GetSection("CosmosDb");
-        var connectionString = cosmosSection["ConnectionString"]
-            ?? throw new InvalidOperationException("CosmosDb:ConnectionString não configurada.");
-        var databaseName = cosmosSection["DatabaseName"]
-            ?? throw new InvalidOperationException("CosmosDb:DatabaseName não configurada.");
+        MongoMappings.Configure();
 
-        services.AddDbContext<OutboxSagaDbContext>(options =>
-            options.UseCosmos(connectionString, databaseName));
+        var mongoOptions = configuration
+            .GetSection("MongoDb")
+            .Get<MongoDbOptions>()
+            ?? throw new InvalidOperationException("MongoDb configuration is required.");
 
-        services.AddScoped<IPedidoRepository, PedidoRepository>();
+        if (string.IsNullOrWhiteSpace(mongoOptions.ConnectionString))
+        {
+            throw new InvalidOperationException("MongoDb:ConnectionString is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(mongoOptions.DatabaseName))
+        {
+            throw new InvalidOperationException("MongoDb:DatabaseName is required.");
+        }
+
+        services.AddSingleton(mongoOptions);
+        services.AddSingleton<IMongoClient>(_ => new MongoClient(mongoOptions.ConnectionString));
+        services.AddScoped<MongoContext>();
+        services.AddScoped<IUnitOfWork, MongoUnitOfWork>();
+        services.AddScoped<IOrderRepository, MongoOrderRepository>();
+        services.AddScoped<IOutboxRepository, MongoOutboxRepository>();
 
         return services;
     }
