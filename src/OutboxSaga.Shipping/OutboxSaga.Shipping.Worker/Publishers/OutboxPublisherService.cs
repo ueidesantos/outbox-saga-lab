@@ -4,9 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OutboxSaga.Messaging.Events;
 using OutboxSaga.Shipping.Application.Abstractions.Messaging;
 using OutboxSaga.Shipping.Domain.Events;
-using OutboxSaga.Shipping.Worker.Contracts;
 using Polly;
 using Polly.Retry;
 
@@ -103,7 +103,7 @@ public sealed class OutboxPublisherService : BackgroundService
 
             if (domainEvent != null)
             {
-                return new ShippingArrangedIntegrationEvent(
+                return new ShippingArrangedEvent(
                     domainEvent.ShippingId,
                     domainEvent.OrderId,
                     domainEvent.TrackingCode,

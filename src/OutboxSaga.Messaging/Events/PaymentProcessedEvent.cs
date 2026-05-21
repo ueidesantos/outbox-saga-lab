@@ -1,6 +1,6 @@
-namespace OutboxSaga.Payment.Worker.Contracts;
+namespace OutboxSaga.Messaging.Events;
 
-public sealed record PaymentProcessedIntegrationEvent(
+public record PaymentProcessedEvent(
     Guid PaymentId,
     Guid OrderId,
     bool Success,

@@ -1,8 +1,8 @@
-namespace OutboxSaga.Orders.Infrastructure.Outbox.Contracts;
+namespace OutboxSaga.Messaging.Events;
 
-public sealed record OrderCreatedIntegrationEvent(
+public record OrderCreatedEvent(
     Guid OrderId,
-    string CustomerId,
+    Guid CustomerId,
     string CustomerName,
     string CustomerEmail,
     decimal TotalValue,
