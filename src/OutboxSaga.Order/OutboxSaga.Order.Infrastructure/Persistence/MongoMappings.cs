@@ -45,11 +45,11 @@ public static class MongoMappings
             });
         }
 
-        if (!BsonClassMap.IsClassMapRegistered(typeof(Order)))
+        if (!BsonClassMap.IsClassMapRegistered(typeof(OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order)))
         {
-            BsonClassMap.RegisterClassMap<Order>(map =>
+            BsonClassMap.RegisterClassMap<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>(map =>
             {
-                map.MapCreator(order => Order.Rehydrate(
+                map.MapCreator(order => OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order.Rehydrate(
                     order.Id,
                     order.Customer,
                     order.Description,
