@@ -5,6 +5,8 @@ using OutboxSaga.Orders.Infrastructure.Persistence;
 
 namespace OutboxSaga.Orders.Infrastructure.Persistence.Repositories;
 
+using OrderAggregate = OutboxSaga.Orders.Domain.Aggregates.OrderAggregate;
+
 public sealed class MongoOrderRepository : IOrderRepository
 {
     private readonly MongoContext _context;
@@ -14,7 +16,7 @@ public sealed class MongoOrderRepository : IOrderRepository
         _context = context;
     }
 
-    public async Task AddAsync(OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order order, CancellationToken ct = default)
+    public async Task AddAsync(OrderAggregate.Order order, CancellationToken ct = default)
     {
         if (_context.Session is not null)
         {
@@ -26,19 +28,22 @@ public sealed class MongoOrderRepository : IOrderRepository
         }
     }
 
-    public async Task<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order?> GetByIdAsync(string id, string tenantId, CancellationToken ct = default)
+    public async Task<OrderAggregate.Order?> GetByIdAsync(string id, string customerId, CancellationToken ct = default)
     {
-        var filter = Builders<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>.Filter.Eq(order => order.Id, id);
+        var filter = Builders<OrderAggregate.Order>.Filter.And(
+            Builders<OrderAggregate.Order>.Filter.Eq(order => order.Id, id),
+            Builders<OrderAggregate.Order>.Filter.Eq("Customer.Id", customerId)
+        );
 
         return await _context.Orders
             .Find(filter)
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<IReadOnlyList<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>> GetAllAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<OrderAggregate.Order>> GetAllAsync(CancellationToken ct = default)
     {
         return await _context.Orders
-            .Find(Builders<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>.Filter.Empty)
+            .Find(Builders<OrderAggregate.Order>.Filter.Empty)
             .ToListAsync(ct);
     }
 }
