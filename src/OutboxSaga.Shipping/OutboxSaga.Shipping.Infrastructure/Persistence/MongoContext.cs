@@ -1,8 +1,19 @@
 using MongoDB.Driver;
-using OutboxSaga.Orders.Application.Messaging;
-using OrderAggregate = OutboxSaga.Orders.Domain.Aggregates.OrderAggregate;
+using OutboxSaga.Shipping.Application.Messaging;
 
-namespace OutboxSaga.Orders.Infrastructure.Persistence;
+namespace OutboxSaga.Shipping.Infrastructure.Persistence;
+
+public sealed class MongoDbOptions
+{
+    public string ConnectionString { get; init; } = string.Empty;
+    public string DatabaseName { get; init; } = "ShippingDb";
+}
+
+public static class MongoCollectionNames
+{
+    public const string Shippings = "shippings";
+    public const string OutboxMessages = "outbox_messages";
+}
 
 public sealed class MongoContext
 {
@@ -15,8 +26,8 @@ public sealed class MongoContext
 
     public IClientSessionHandle? Session { get; private set; }
 
-    public IMongoCollection<OrderAggregate.Order> Orders
-        => _database.GetCollection<OrderAggregate.Order>(MongoCollectionNames.Orders);
+    public IMongoCollection<Domain.Aggregates.ShippingAggregate.Shipping> Shippings
+        => _database.GetCollection<Domain.Aggregates.ShippingAggregate.Shipping>(MongoCollectionNames.Shippings);
 
     public IMongoCollection<OutboxMessage> OutboxMessages
         => _database.GetCollection<OutboxMessage>(MongoCollectionNames.OutboxMessages);
