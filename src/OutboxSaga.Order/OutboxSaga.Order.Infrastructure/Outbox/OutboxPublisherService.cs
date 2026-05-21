@@ -4,9 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OutboxSaga.Messaging.Events;
 using OutboxSaga.Orders.Application.Abstractions.Messaging;
 using OutboxSaga.Orders.Domain.Events;
+using OutboxSaga.Orders.Infrastructure.Outbox.Contracts;
 using OutboxSaga.Orders.Infrastructure.Persistence;
 using Polly;
 using Polly.Retry;
@@ -112,9 +112,9 @@ public sealed class OutboxPublisherService : BackgroundService
 
             if (domainEvent != null)
             {
-                return new OrderCreatedEvent(
+                return new OrderCreatedIntegrationEvent(
                     Guid.Parse(message.AggregateId),
-                    Guid.Parse(domainEvent.CustomerId),
+                    domainEvent.CustomerId,
                     "N/A",
                     "N/A",
                     domainEvent.TotalValue.Amount,

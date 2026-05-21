@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ueidesantos.github.io/outbox-saga-lab/contracts/orders/order-created.v1.schema.json",
+  "title": "OrderCreatedV1",
+  "type": "object",
+  "required": [
+    "order_id",
+    "customer_id",
+    "customer_name",
+    "customer_email",
+    "total_amount",
+    "currency",
+    "description",
+    "created_at_utc"
+  ],
+  "properties": {
+    "order_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "customer_email": {
+      "type": "string",
+      "format": "email"
+    },
+    "total_amount": {
+      "type": "number",
+      "minimum": 0
+    },
+    "currency": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 3
+    },
+    "description": {
+      "type": "string"
+    },
+    "created_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

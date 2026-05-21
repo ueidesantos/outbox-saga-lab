@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OutboxSaga.Payment.Domain\OutboxSaga.Payment.Domain.csproj" />
-    <ProjectReference Include="..\..\OutboxSaga.Messaging\OutboxSaga.Messaging.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

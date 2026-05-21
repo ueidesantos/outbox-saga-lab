@@ -1,9 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using OutboxSaga.Messaging.Events;
 using OutboxSaga.Payment.Application.Abstractions.Messaging;
 using OutboxSaga.Payment.Application.Abstractions.Persistence;
 using OutboxSaga.Payment.Application.Messaging;
+using OutboxSaga.Payment.Worker.Contracts;
 
 namespace OutboxSaga.Payment.Worker.Handlers;
 
@@ -18,7 +18,7 @@ public class OrderCreatedHandler
         _logger = logger;
     }
 
-    public async Task HandleAsync(OrderCreatedEvent @event, string? correlationId, string? causationId, CancellationToken ct)
+    public async Task HandleAsync(OrderCreatedIntegrationEvent @event, string? correlationId, string? causationId, CancellationToken ct)
     {
         using var scope = _serviceProvider.CreateScope();
         var paymentRepository = scope.ServiceProvider.GetRequiredService<IPaymentRepository>();

@@ -1,95 +1,265 @@
 # Outbox Saga Lab
 
-Um laboratório de arquitetura distribuída em **.NET 10**, criado para estudar, praticar e registrar decisões envolvendo **Clean Architecture**, **DDD**, **Outbox Pattern**, **Saga Orchestration**, **MongoDB** e **AWS MSK (Kafka)**.
+Um laboratório de arquitetura distribuída em **.NET 10**, criado para estudar, praticar e registrar decisões envolvendo **Clean Architecture**, **DDD**, **Outbox Pattern**, **MongoDB**, **AWS MSK/Kafka** e uma base evolutiva para **Sagas** em microsserviços.
 
 A ideia deste projeto é ir além de uma API CRUD, modelando decisões arquiteturais reais: consistência eventual, persistência confiável de eventos, isolamento de microsserviços e resiliência em sistemas distribuídos.
 
 ## Objetivo
 
-Este repositório serve como base de estudo para o papel de **Staff Architect**, onde cada componente é desenhado para suportar falhas parciais e garantir a rastreabilidade total do processo de negócio.
+Este repositório serve como base de estudo para arquitetura distribuída. A proposta é manter a arquitetura visível no código, sem esconder decisões importantes em abstrações genéricas demais.
 
 O cenário evoluiu para:
 
-- **Order Service:** Orquestrador da Saga. Cria o pedido e coordena o fluxo.
-- **Payment Service:** Reage à criação do pedido, processa o pagamento de forma idempotente e registra o resultado via Outbox.
-- **Shipping Service:** Reage ao pagamento aprovado e prepara a logística de entrega.
-- **Messaging Service:** Biblioteca compartilhada de contratos (Fat Events) para garantir o desacoplamento binário.
+- **Orders:** cria o pedido, registra eventos de domínio e persiste mensagens na outbox.
+- **Payment:** consome eventos de pedido, processa pagamento de forma idempotente e publica o resultado via outbox.
+- **FinanceIntegration:** boundary externo planejado para integração financeira/ERP/SAP, possivelmente em Python.
+- **Shipping:** consome eventos de fluxo aprovado e prepara a logística de entrega.
+- **AWS MSK/Kafka:** canal assíncrono entre os bounded contexts.
 
 ```mermaid
-flowchart TD
-    Client[Client/API Consumer] -->|POST /orders| API[Orders API]
+flowchart LR
+    Client[Client/API Consumer] --> Orders[Orders Service]
+    Orders --> OrdersOutbox[(Orders DB + Outbox)]
+    OrdersOutbox --> OrdersWorker[Orders Outbox Worker]
+    OrdersWorker --> MSK[AWS MSK / Kafka]
 
-    subgraph OrderService [Order Microservice]
-        API --> APP_O[Application]
-        APP_O --> DOM_O[Domain]
-        APP_O --> OUT_O[Outbox]
-        UOW_O[Unit of Work] --> MON_O[(MongoDB: OrderDb)]
-        OUT_O --> UOW_O
-        PUB_O[Outbox Publisher] -->|order-created| KAFKA{AWS MSK / Kafka}
-    end
+    MSK --> Payment[Payment Service]
+    Payment --> PaymentOutbox[(Payment DB + Outbox)]
+    PaymentOutbox --> MSK
 
-    subgraph PaymentService [Payment Microservice]
-        CON_P[Kafka Consumer] -->|order-created| HAN_P[Payment Handler]
-        HAN_P -->|Idempotency Check| MON_P[(MongoDB: PaymentDb)]
-        HAN_P --> OUT_P[Outbox]
-        PUB_P[Outbox Publisher] -->|payment-processed| KAFKA
-    end
+    MSK --> Finance[FinanceIntegration]
+    Finance --> FinanceOutbox[(Finance DB + Outbox)]
+    FinanceOutbox --> MSK
 
-    subgraph ShippingService [Shipping Microservice]
-        CON_S[Kafka Consumer] -->|order-paid| HAN_S[Shipping Handler]
-        HAN_S --> MON_S[(MongoDB: ShippingDb)]
-        HAN_S --> OUT_S[Outbox]
-        PUB_S[Outbox Publisher] -->|shipping-arranged| KAFKA
-    end
+    MSK --> Shipping[Shipping Service]
+    Shipping --> ShippingOutbox[(Shipping DB + Outbox)]
+    ShippingOutbox --> MSK
 
-    KAFKA --> CON_P
-    KAFKA -->|Saga Orchestration| CON_O[Order Saga Consumer]
-    KAFKA --> CON_S
+    MSK --> Coordinator[Saga Coordinator]
 ```
 
-## Decisões Arquiteturais (Nível Staff)
+## Fluxo Da Saga
 
-### 1. Transactional Outbox (Shared Nothing)
-Cada serviço implementa sua própria lógica de Outbox e Publisher. Isso evita o acoplamento por "Shared Library" de infraestrutura, permitindo que cada serviço evolua seu banco de dados ou estratégia de persistência de forma independente.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client
+    participant Orders
+    participant MSK as AWS MSK
+    participant Payment
+    participant Finance as FinanceIntegration
+    participant Shipping
+    participant Coordinator as Saga Coordinator
 
-### 2. Idempotência (Inbox Pattern)
-Como o Kafka garante a entrega *at-least-once*, os consumidores de Payment e Shipping realizam uma verificação de idempotência no banco de dados antes de processar qualquer mensagem, evitando duplicidade de cobranças ou envios.
+    Client->>Orders: POST /orders
+    Orders->>Orders: Save Order + OutboxMessage
+    Orders->>MSK: OrderCreated
+    MSK->>Payment: Consume OrderCreated
+    Payment->>Payment: Check idempotency
+    Payment->>Payment: Save Payment + OutboxMessage
+    Payment->>MSK: PaymentApproved / PaymentRejected
+    MSK->>Finance: Consume PaymentApproved
+    Finance->>Finance: Save FinanceEntry + OutboxMessage
+    Finance->>MSK: FinanceEntryRegistered / FinanceEntryFailed
+    MSK->>Shipping: Consume FinanceEntryRegistered
+    Shipping->>Shipping: Save Shipment + OutboxMessage
+    Shipping->>MSK: ShipmentCreated / ShipmentFailed
+    MSK->>Coordinator: Update saga state
+```
 
-### 3. Distributed Tracing (Correlation & Causation)
-Todas as mensagens trafegam com:
-- **CorrelationId:** Identificador único da jornada do pedido, permitindo rastrear o fluxo completo nos logs de todos os serviços.
-- **CausationId:** Identificador da mensagem que causou a ação atual, permitindo reconstruir a árvore de eventos.
+## Decisões Arquiteturais
 
-### 4. Resiliência com Polly
-O `OutboxPublisherService` utiliza políticas de **Retry com Exponential Backoff** via Polly para lidar com instabilidades temporárias no Broker de mensagens.
+### 1. Transactional Outbox
 
-### 5. Fat Events
-Os eventos carregam dados suficientes para que o próximo serviço processe sua lógica sem precisar consultar o serviço anterior (API Call síncrona), preservando a autonomia.
+Cada serviço persiste seu estado e sua mensagem de outbox na mesma transação local.
+
+```text
+Aggregate + OutboxMessage = mesma transação local
+```
+
+Isso evita o problema clássico de salvar no banco e falhar antes de publicar no broker.
+
+### 2. Shared Nothing
+
+Cada bounded context mantém seu próprio banco, seu próprio outbox e sua própria implementação de publicação/consumo.
+
+O padrão se repete de forma intencional. A repetição aqui protege autonomia.
+
+```text
+Orders DB                -> outbox_messages
+Payment DB               -> outbox_messages
+FinanceIntegration DB    -> outbox_messages
+Shipping DB              -> outbox_messages
+```
+
+### 3. Idempotência
+
+Como Kafka trabalha naturalmente com entrega *at-least-once*, consumers precisam verificar mensagens já processadas antes de executar efeitos colaterais.
+
+Exemplos de efeitos colaterais que não devem duplicar:
+
+- cobrança;
+- registro financeiro;
+- criação de envio;
+- atualização de estado da saga.
+
+### 4. Observabilidade
+
+Eventos carregam identificadores para rastreabilidade do fluxo:
+
+- `message_id`
+- `correlation_id`
+- `causation_id`
+- `event_type`
+- `event_version`
+
+`correlation_id` acompanha a jornada inteira.
+
+`causation_id` aponta qual mensagem causou o próximo evento.
+
+### 5. Resiliência
+
+Publicadores de outbox usam retry com exponential backoff para falhas transitórias no broker.
+
+Mensagens malformadas ou falhas permanentes devem evoluir para uma estratégia de DLQ ou intervenção manual.
+
+### 6. Contratos Públicos Versionados
+
+Bounded contexts devem se comunicar por eventos públicos versionados, não por compartilhamento de domínio.
+
+O que pode ser compartilhado:
+
+```text
+contratos JSON Schema
+nomes de topics
+convenção de envelope
+políticas arquiteturais
+```
+
+O que não deve ser compartilhado:
+
+```text
+domínio
+repositórios
+DTOs internos
+implementação de outbox
+implementação de idempotência
+```
+
+Os contratos ficam em `contracts/`.
+
+## Messaging
+
+`OutboxSaga.Messaging` deve ser tratado como building block técnico, não como pacote de domínio compartilhado.
+
+Ele pode conter:
+
+- envelope de integração;
+- nomes de headers;
+- helpers técnicos.
+
+Ele não deve conter:
+
+- `OrderCreated`;
+- `PaymentApproved`;
+- `FinanceEntryRegistered`;
+- `ShipmentCreated`;
+- qualquer evento específico de um bounded context.
+
+Esses eventos pertencem aos contratos públicos versionados e às bordas dos serviços que os publicam/consomem.
 
 ## Camadas
 
 ```text
 src/
-  OutboxSaga.Messaging/      # Contratos de eventos compartilhados
-  OutboxSaga.Order/          # API e Orquestrador de Pedidos
-  OutboxSaga.Payment/        # Worker de Processamento de Pagamento
-  OutboxSaga.Shipping/       # Worker de Logística e Envio
+  OutboxSaga.Messaging/
+  OutboxSaga.Order/
+    OutboxSaga.Order.Api/
+    OutboxSaga.Order.Application/
+    OutboxSaga.Order.Domain/
+    OutboxSaga.Order.Infrastructure/
+  OutboxSaga.Payment/
+    OutboxSaga.Payment.Application/
+    OutboxSaga.Payment.Domain/
+    OutboxSaga.Payment.Infrastructure/
+    OutboxSaga.Payment.Worker/
+  OutboxSaga.Shipping/
+    OutboxSaga.Shipping.Application/
+    OutboxSaga.Shipping.Domain/
+    OutboxSaga.Shipping.Infrastructure/
+    OutboxSaga.Shipping.Worker/
 ```
+
+## FinanceIntegration
+
+`FinanceIntegration` é planejado como um boundary externo, possivelmente em Python, simulando integração com ERP/SAP ou outro sistema financeiro.
+
+A premissa é que ele poderia ser mantido por outro time, com outro PO, outro repositório e outro ciclo de deploy.
+
+Por isso, ele deve integrar por:
+
+```text
+AWS MSK + contratos públicos
+```
+
+E não por:
+
+```text
+DLL compartilhada
+DTO interno
+referência direta a projeto .NET
+```
+
+Detalhes: `docs/finance-integration-boundary.md`.
 
 ## Stack
 
 - C# / .NET 10
-- MongoDB Atlas (com Client Sessions para Transações)
-- Confluent.Kafka (AWS MSK Ready)
-- Polly (Resiliência)
-- Clean Architecture & DDD
+- ASP.NET Core Minimal APIs
+- Worker Services
+- MongoDB Atlas
+- MongoDB Driver
+- AWS MSK / Kafka
+- Confluent.Kafka
+- Polly
+- Clean Architecture
+- DDD
+- Transactional Outbox
+- Idempotência
+- Base para Saga Pattern
+- Scalar/OpenAPI
+
+## Como Rodar
+
+Configure a connection string do MongoDB em variável de ambiente ou user-secrets.
+
+Exemplo para Orders:
+
+```powershell
+dotnet user-secrets set "MongoDb:ConnectionString" "mongodb+srv://user-service-saga-lab:<db_password>@cluster0.lrlk00w.mongodb.net/?appName=Cluster0" --project src/OutboxSaga.Order/OutboxSaga.Order.Api
+dotnet user-secrets set "MongoDb:DatabaseName" "OutboxSagaDb" --project src/OutboxSaga.Order/OutboxSaga.Order.Api
+```
+
+Build:
+
+```powershell
+dotnet build src/OutboxSaga.Order/OutboxSaga.Order.Api/OutboxSaga.Orders.Api.csproj
+dotnet build src/OutboxSaga.Payment/OutboxSaga.Payment.Worker/OutboxSaga.Payment.Worker.csproj
+dotnet build src/OutboxSaga.Shipping/OutboxSaga.Shipping.Worker/OutboxSaga.Shipping.Worker.csproj
+```
 
 ## Próximos Passos
 
-- Implementar as **Compensating Transactions** (Estorno de pagamento se o envio falhar).
-- Adicionar **Dead Letter Queues (DLQ)** para mensagens malformadas.
-- Implementar **Dashboard de Observabilidade** consumindo o CorrelationId.
+- Refinar os contratos públicos em `contracts/`.
+- Implementar o boundary externo `FinanceIntegration`.
+- Evoluir o Saga Coordinator.
+- Implementar compensações.
+- Adicionar DLQ.
+- Melhorar observabilidade com logs estruturados, tracing e métricas.
+- Adicionar testes de domínio, application e integração.
 
 ## Status
 
-**Fase 2 Concluída:** Infraestrutura de Outbox e serviços de Payment/Shipping implementados e operacionais. Próximo foco: Lógica de compensação e orquestração fina no Order Service.
+Projeto em evolução.
+
+A base atual cobre criação de pedido, outbox transacional em Orders e a evolução para serviços de Payment e Shipping com workers, MongoDB e publicação assíncrona preparada para AWS MSK.
