@@ -14,28 +14,31 @@ public sealed class MongoOrderRepository : IOrderRepository
         _context = context;
     }
 
-    public async Task AddAsync(Order order, CancellationToken ct = default)
+    public async Task AddAsync(OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order order, CancellationToken ct = default)
     {
         if (_context.Session is not null)
         {
             await _context.Orders.InsertOneAsync(_context.Session, order, cancellationToken: ct);
-            return;
         }
-
-        await _context.Orders.InsertOneAsync(order, cancellationToken: ct);
+        else
+        {
+            await _context.Orders.InsertOneAsync(order, cancellationToken: ct);
+        }
     }
 
-    public async Task<Order?> GetByIdAsync(string id, string customerId, CancellationToken ct = default)
+    public async Task<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order?> GetByIdAsync(string id, string tenantId, CancellationToken ct = default)
     {
-        var filter = Builders<Order>.Filter.And(
-            Builders<Order>.Filter.Eq(order => order.Id, id),
-            Builders<Order>.Filter.Eq(order => order.Customer.Id, customerId));
+        var filter = Builders<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>.Filter.Eq(order => order.Id, id);
 
-        return await _context.Orders.Find(filter).FirstOrDefaultAsync(ct);
+        return await _context.Orders
+            .Find(filter)
+            .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<IReadOnlyList<Order>> GetAllAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>> GetAllAsync(CancellationToken ct = default)
     {
-        return await _context.Orders.Find(Builders<Order>.Filter.Empty).ToListAsync(ct);
+        return await _context.Orders
+            .Find(Builders<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>.Filter.Empty)
+            .ToListAsync(ct);
     }
 }

@@ -5,13 +5,12 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OutboxSaga.Messaging.Events;
-using OutboxSaga.Orders.Application.Abstractions.Messaging;
-using OutboxSaga.Orders.Domain.Events;
-using OutboxSaga.Orders.Infrastructure.Persistence;
+using OutboxSaga.Shipping.Application.Abstractions.Messaging;
+using OutboxSaga.Shipping.Domain.Events;
 using Polly;
 using Polly.Retry;
 
-namespace OutboxSaga.Orders.Infrastructure.Outbox;
+namespace OutboxSaga.Shipping.Worker.Publishers;
 
 public sealed class OutboxPublisherService : BackgroundService
 {
@@ -19,7 +18,7 @@ public sealed class OutboxPublisherService : BackgroundService
     private readonly ILogger<OutboxPublisherService> _logger;
     private readonly ProducerConfig _producerConfig;
     private readonly AsyncRetryPolicy _retryPolicy;
-    private const string OrderCreatedTopic = "order-created";
+    private const string ShippingArrangedTopic = "shipping-arranged";
 
     public OutboxPublisherService(
         IServiceProvider serviceProvider,
@@ -30,20 +29,13 @@ public sealed class OutboxPublisherService : BackgroundService
         _logger = logger;
         _producerConfig = producerConfig.Value;
 
-        // Configure Polly retry policy: 3 retries with exponential backoff
         _retryPolicy = Policy
             .Handle<KafkaException>()
-            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
-                (exception, timeSpan, retryCount, context) =>
-                {
-                    _logger.LogWarning(exception, "Retry {RetryCount} for publishing to Kafka after {TimeSpan}ms", retryCount, timeSpan.TotalMilliseconds);
-                });
+            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Outbox Publisher Service is starting.");
-
         var producerConfig = new ProducerConfig(_producerConfig)
         {
             Acks = Acks.All,
@@ -60,7 +52,7 @@ public sealed class OutboxPublisherService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred while publishing outbox messages.");
+                _logger.LogError(ex, "Error in OutboxPublisher");
             }
 
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
@@ -76,8 +68,6 @@ public sealed class OutboxPublisherService : BackgroundService
 
         foreach (var message in messages)
         {
-            _logger.LogInformation("Publishing message {MessageId} of type {EventType}. CorrelationId: {CorrelationId}", message.Id, message.EventType, message.CorrelationId);
-
             object? eventToPublish = MapToExternalEvent(message);
 
             if (eventToPublish is not null)
@@ -97,7 +87,7 @@ public sealed class OutboxPublisherService : BackgroundService
 
                 await _retryPolicy.ExecuteAsync(async () =>
                 {
-                    await producer.ProduceAsync(OrderCreatedTopic, kafkaMessage, ct);
+                    await producer.ProduceAsync(ShippingArrangedTopic, kafkaMessage, ct);
                 });
             }
 
@@ -107,19 +97,16 @@ public sealed class OutboxPublisherService : BackgroundService
 
     private static object? MapToExternalEvent(Application.Messaging.OutboxMessage message)
     {
-        if (message.EventType.Contains(nameof(OrderCreatedDomainEvent)))
+        if (message.EventType.Contains(nameof(ShippingArrangedDomainEvent)))
         {
-            var domainEvent = JsonSerializer.Deserialize<OrderCreatedDomainEvent>(message.Payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var domainEvent = JsonSerializer.Deserialize<ShippingArrangedDomainEvent>(message.Payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
             if (domainEvent != null)
             {
-                return new OrderCreatedEvent(
-                    Guid.Parse(message.AggregateId),
-                    Guid.Parse(domainEvent.CustomerId),
-                    "N/A",
-                    "N/A",
-                    domainEvent.TotalValue.Amount,
-                    "N/A",
+                return new ShippingArrangedEvent(
+                    domainEvent.ShippingId,
+                    domainEvent.OrderId,
+                    domainEvent.TrackingCode,
                     domainEvent.OccurredOnUtc);
             }
         }

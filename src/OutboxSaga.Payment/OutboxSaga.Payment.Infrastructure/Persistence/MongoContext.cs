@@ -1,8 +1,7 @@
 using MongoDB.Driver;
-using OutboxSaga.Orders.Application.Messaging;
-using OutboxSaga.Orders.Domain.Aggregates.OrderAggregate;
+using OutboxSaga.Payment.Application.Messaging;
 
-namespace OutboxSaga.Orders.Infrastructure.Persistence;
+namespace OutboxSaga.Payment.Infrastructure.Persistence;
 
 public sealed class MongoContext
 {
@@ -15,8 +14,8 @@ public sealed class MongoContext
 
     public IClientSessionHandle? Session { get; private set; }
 
-    public IMongoCollection<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order> Orders
-        => _database.GetCollection<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>(MongoCollectionNames.Orders);
+    public IMongoCollection<Domain.Aggregates.PaymentAggregate.Payment> Payments
+        => _database.GetCollection<Domain.Aggregates.PaymentAggregate.Payment>(MongoCollectionNames.Payments);
 
     public IMongoCollection<OutboxMessage> OutboxMessages
         => _database.GetCollection<OutboxMessage>(MongoCollectionNames.OutboxMessages);

@@ -1,8 +1,10 @@
+using Confluent.Kafka;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Driver;
 using OutboxSaga.Orders.Application.Abstractions.Messaging;
 using OutboxSaga.Orders.Application.Abstractions.Persistence;
+using OutboxSaga.Orders.Infrastructure.Outbox;
 using OutboxSaga.Orders.Infrastructure.Persistence;
 using OutboxSaga.Orders.Infrastructure.Persistence.Repositories;
 
@@ -37,6 +39,9 @@ public static class InfrastructureServiceExtensions
         services.AddScoped<IUnitOfWork, MongoUnitOfWork>();
         services.AddScoped<IOrderRepository, MongoOrderRepository>();
         services.AddScoped<IOutboxRepository, MongoOutboxRepository>();
+
+        services.Configure<ProducerConfig>(configuration.GetSection("Kafka:Producer"));
+        services.AddHostedService<OutboxPublisherService>();
 
         return services;
     }
