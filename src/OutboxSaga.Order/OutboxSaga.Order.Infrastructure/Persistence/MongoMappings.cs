@@ -4,8 +4,6 @@ using OutboxSaga.Orders.Domain.ValueObjects;
 
 namespace OutboxSaga.Orders.Infrastructure.Persistence;
 
-using OrderAggregate = OutboxSaga.Orders.Domain.Aggregates.OrderAggregate;
-
 public static class MongoMappings
 {
     private static bool _configured;
@@ -47,11 +45,11 @@ public static class MongoMappings
             });
         }
 
-        if (!BsonClassMap.IsClassMapRegistered(typeof(OrderAggregate.Order)))
+        if (!BsonClassMap.IsClassMapRegistered(typeof(OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order)))
         {
-            BsonClassMap.RegisterClassMap<OrderAggregate.Order>(map =>
+            BsonClassMap.RegisterClassMap<OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order>(map =>
             {
-                map.MapCreator(order => OrderAggregate.Order.Rehydrate(
+                map.MapCreator(order => OutboxSaga.Orders.Domain.Aggregates.OrderAggregate.Order.Rehydrate(
                     order.Id,
                     order.Customer,
                     order.Description,

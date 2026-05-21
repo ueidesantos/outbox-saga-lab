@@ -12,16 +12,11 @@ public sealed class OutboxMessage
     public string EventType { get; init; } = string.Empty;
     public string Payload { get; init; } = string.Empty;
     public string? CorrelationId { get; init; }
-    public string? CausationId { get; init; }
     public DateTime OccurredOnUtc { get; init; }
     public DateTime CreatedAtUtc { get; init; } = DateTime.UtcNow;
     public DateTime? PublishedAtUtc { get; private set; }
 
-    public static OutboxMessage FromDomainEvent(
-        string aggregateId,
-        IDomainEvent domainEvent,
-        string? correlationId = null,
-        string? causationId = null)
+    public static OutboxMessage FromDomainEvent(string aggregateId, IDomainEvent domainEvent)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(aggregateId);
         ArgumentNullException.ThrowIfNull(domainEvent);
@@ -31,9 +26,7 @@ public sealed class OutboxMessage
             AggregateId = aggregateId,
             EventType = domainEvent.GetType().FullName ?? domainEvent.GetType().Name,
             Payload = JsonSerializer.Serialize(domainEvent, domainEvent.GetType(), SerializerOptions),
-            OccurredOnUtc = domainEvent.OccurredOnUtc,
-            CorrelationId = correlationId ?? Guid.NewGuid().ToString(),
-            CausationId = causationId
+            OccurredOnUtc = domainEvent.OccurredOnUtc
         };
     }
 

@@ -21,16 +21,6 @@
     <Project Path="src/OutboxSaga.Order/OutboxSaga.Order.Domain/OutboxSaga.Orders.Domain.csproj" />
     <Project Path="src/OutboxSaga.Order/OutboxSaga.Order.Infrastructure/OutboxSaga.Orders.Infrastructure.csproj" />
   </Folder>
-  <Folder Name="/OutboxSaga.Payment/">
-    <Project Path="src/OutboxSaga.Payment/OutboxSaga.Payment.Domain/OutboxSaga.Payment.Domain.csproj" />
-    <Project Path="src/OutboxSaga.Payment/OutboxSaga.Payment.Application/OutboxSaga.Payment.Application.csproj" />
-    <Project Path="src/OutboxSaga.Payment/OutboxSaga.Payment.Infrastructure/OutboxSaga.Payment.Infrastructure.csproj" />
-    <Project Path="src/OutboxSaga.Payment/OutboxSaga.Payment.Worker/OutboxSaga.Payment.Worker.csproj" />
-  </Folder>
-  <Folder Name="/OutboxSaga.Shipping/">
-    <Project Path="src/OutboxSaga.Shipping/OutboxSaga.Shipping.Domain/OutboxSaga.Shipping.Domain.csproj" />
-    <Project Path="src/OutboxSaga.Shipping/OutboxSaga.Shipping.Application/OutboxSaga.Shipping.Application.csproj" />
-    <Project Path="src/OutboxSaga.Shipping/OutboxSaga.Shipping.Infrastructure/OutboxSaga.Shipping.Infrastructure.csproj" />
-    <Project Path="src/OutboxSaga.Shipping/OutboxSaga.Shipping.Worker/OutboxSaga.Shipping.Worker.csproj" />
-  </Folder>
+  <Folder Name="/OutboxSaga.Payment/" />
+  <Folder Name="/OutboxSaga.Shipping/" />
 </Solution>
