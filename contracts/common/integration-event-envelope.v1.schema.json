@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ueidesantos.github.io/outbox-saga-lab/contracts/common/integration-event-envelope.v1.schema.json",
+  "title": "IntegrationEventEnvelopeV1",
+  "type": "object",
+  "required": [
+    "message_id",
+    "event_type",
+    "event_version",
+    "source",
+    "correlation_id",
+    "occurred_on_utc",
+    "payload"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string"
+    },
+    "event_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "source": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "causation_id": {
+      "type": ["string", "null"],
+      "format": "uuid"
+    },
+    "occurred_on_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

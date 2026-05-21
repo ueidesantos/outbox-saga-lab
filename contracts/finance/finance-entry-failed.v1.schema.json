@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ueidesantos.github.io/outbox-saga-lab/contracts/finance/finance-entry-failed.v1.schema.json",
+  "title": "FinanceEntryFailedV1",
+  "type": "object",
+  "required": [
+    "payment_id",
+    "order_id",
+    "reason",
+    "failed_at_utc"
+  ],
+  "properties": {
+    "payment_id": {
+      "type": "string"
+    },
+    "order_id": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "failed_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}
