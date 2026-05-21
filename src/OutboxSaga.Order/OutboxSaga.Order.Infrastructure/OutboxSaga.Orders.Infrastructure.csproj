@@ -20,7 +20,6 @@
   <ItemGroup>
     <ProjectReference Include="..\OutboxSaga.Order.Application\OutboxSaga.Orders.Application.csproj" />
     <ProjectReference Include="..\OutboxSaga.Order.Domain\OutboxSaga.Orders.Domain.csproj" />
-    <ProjectReference Include="..\..\OutboxSaga.Messaging\OutboxSaga.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

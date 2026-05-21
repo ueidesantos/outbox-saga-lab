@@ -1,6 +1,6 @@
 # Outbox Saga Lab
 
-Um laboratório de arquitetura distribuída em **.NET 10**, criado para estudar, praticar e registrar decisões envolvendo **Clean Architecture**, **DDD**, **Outbox Pattern**, **MongoDB** e uma base evolutiva para **Sagas** em microsserviços.
+Um laboratório de arquitetura distribuída em **.NET 10**, criado para estudar, praticar e registrar decisões envolvendo **Clean Architecture**, **DDD**, **Outbox Pattern**, **MongoDB**, **AWS MSK/Kafka** e uma base evolutiva para **Sagas** em microsserviços.
 
 A ideia deste projeto é ir um pouco além de uma API CRUD. O foco está em modelar decisões arquiteturais reais: consistência eventual, persistência confiável de eventos, separação de responsabilidades e preparação para comunicação assíncrona entre serviços.
 
@@ -14,22 +14,25 @@ O cenário base é simples:
 - o domínio levanta eventos;
 - a Application transforma esses eventos em mensagens de outbox;
 - Order e Outbox são persistidos juntos em uma transação;
-- futuramente, um worker publicará essas mensagens em um broker;
-- outros serviços, como Payment e Shipping, poderão reagir e compor uma saga.
+- futuramente, um worker publicará essas mensagens no AWS MSK;
+- outros serviços, como Payment, FinanceIntegration e Shipping, poderão reagir e compor uma saga.
 
 ```mermaid
 flowchart LR
-    Client[Client/API Consumer] --> API[Orders API]
-    API --> APP[Application Layer]
-    APP --> DOMAIN[Domain Layer]
-    APP --> OUTBOX[Outbox Message]
-    APP --> UOW[Unit of Work]
-    UOW --> MONGO[(MongoDB)]
-    MONGO --> WORKER[Outbox Worker]
-    WORKER --> BUS[Message Broker]
-    BUS --> PAYMENT[Payment Service]
-    BUS --> SHIPPING[Shipping Service]
-    BUS --> COORDINATOR[Saga Coordinator]
+    Client[Client/API Consumer] --> Orders[Orders Service]
+    Orders --> OrdersOutbox[(Orders DB + Outbox)]
+    OrdersOutbox --> OrdersWorker[Orders Outbox Worker]
+    OrdersWorker --> MSK[AWS MSK / Kafka]
+    MSK --> Payment[Payment Service]
+    Payment --> PaymentOutbox[(Payment DB + Outbox)]
+    PaymentOutbox --> MSK
+    MSK --> Finance[FinanceIntegration]
+    Finance --> FinanceOutbox[(Finance DB + Outbox)]
+    FinanceOutbox --> MSK
+    MSK --> Shipping[Shipping Service]
+    Shipping --> ShippingOutbox[(Shipping DB + Outbox)]
+    ShippingOutbox --> MSK
+    MSK --> Coordinator[Saga Coordinator]
 ```
 
 ## Fluxo De Criação De Pedido
@@ -109,7 +112,7 @@ Exemplos:
 - `OrderStatus`
 - `OrderCreatedDomainEvent`
 
-O domínio não conhece MongoDB, HTTP, Service Bus ou qualquer detalhe externo.
+O domínio não conhece MongoDB, HTTP, AWS MSK/Kafka ou qualquer detalhe externo.
 
 ### Application
 
@@ -183,6 +186,78 @@ A regra é simples: o domínio fica no centro.
 
 Infraestrutura depende da aplicação, não o contrário. A Application define portas; a Infrastructure implementa adaptadores.
 
+## Bounded Contexts E Contratos
+
+Os bounded contexts devem se comunicar por eventos públicos versionados, não por compartilhamento de código de domínio.
+
+```text
+Orders (.NET)
+  -> orders.events.v1
+
+Payment
+  -> payments.events.v1
+
+FinanceIntegration (Python / externo)
+  -> finance.events.v1
+
+Shipping
+  -> shipping.events.v1
+```
+
+`FinanceIntegration` é tratado como um contexto isolado. Na teoria, ele poderia ser mantido por outro time, com outro PO, outro repositório e outra stack.
+
+Por isso, ele não deve depender de projetos `.csproj`, DTOs internos ou bibliotecas específicas dos serviços .NET.
+
+O que pode ser compartilhado:
+
+```text
+contratos públicos em JSON Schema
+nomes de topics
+convenção de envelope
+políticas arquiteturais
+```
+
+O que não deve ser compartilhado:
+
+```text
+domínio
+repositórios
+DTOs internos
+implementação de outbox
+implementação de idempotência
+```
+
+Os contratos públicos ficam em `contracts/`.
+
+## Padrões Mantidos
+
+Cada bounded context deve implementar os mesmos padrões, mas com autonomia.
+
+- **Outbox:** cada serviço possui seu próprio outbox local.
+- **Idempotência:** consumers verificam mensagens já processadas antes de executar efeitos colaterais.
+- **Resiliência:** publicação de eventos com retry e exponential backoff.
+- **Observabilidade:** propagação de `correlation_id`, `causation_id`, `message_id` e `event_type`.
+- **Shared Nothing:** cada serviço mantém seu próprio banco, seu próprio outbox e sua própria implementação.
+
+```mermaid
+flowchart TD
+    Event[Incoming Event] --> Idempotency[Check processed_messages]
+    Idempotency --> DomainAction[Execute domain/application action]
+    DomainAction --> LocalTx[Persist state + OutboxMessage]
+    LocalTx --> Publisher[Outbox Publisher]
+    Publisher --> Retry[Retry with exponential backoff]
+    Retry --> MSK[AWS MSK]
+```
+
+O padrão de outbox é o mesmo entre os serviços, mas a tabela/collection não é compartilhada.
+
+```text
+Orders DB                -> outbox_messages
+Payment DB               -> outbox_messages
+FinanceIntegration DB    -> outbox_messages
+Shipping DB              -> outbox_messages
+```
+
 ## MongoDB E Transação
 
 O projeto usa MongoDB para persistir:
@@ -223,9 +298,11 @@ Infrastructure: persiste/publica
 - ASP.NET Core Minimal APIs
 - MongoDB Driver
 - MongoDB Atlas
+- AWS MSK / Kafka
 - Clean Architecture
 - DDD
 - Transactional Outbox
+- Idempotência
 - Base para Saga Pattern
 - Scalar/OpenAPI
 
@@ -250,16 +327,18 @@ dotnet run --project src/OutboxSaga.Order/OutboxSaga.Order.Api/OutboxSaga.Orders
 ## Próximos Passos
 
 - Implementar o Outbox Worker.
-- Publicar eventos em um broker.
+- Publicar eventos no AWS MSK.
 - Adicionar Payment Service.
+- Criar o boundary externo `FinanceIntegration`.
 - Adicionar Shipping Service.
 - Evoluir o Saga Coordinator.
 - Adicionar retries e dead-letter strategy.
 - Adicionar observabilidade com logs estruturados, tracing e métricas.
+- Validar contratos versionados em `contracts/`.
 - Criar testes de domínio, application e integração.
 
 ## Status
 
 Projeto em evolução.
 
-A base atual já cobre o fluxo de criação de pedido com persistência transacional em MongoDB e registro de mensagens na outbox. O próximo grande passo é processar a outbox e iniciar a comunicação assíncrona entre serviços.
+A base atual já cobre o fluxo de criação de pedido com persistência transacional em MongoDB e registro de mensagens na outbox. O próximo grande passo é processar a outbox e iniciar a comunicação assíncrona pelo AWS MSK.
