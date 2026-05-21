@@ -37,4 +37,3 @@ shipping.events.v1
 Serviços podem compartilhar contratos públicos versionados.
 
 Serviços não devem compartilhar código de domínio, DTOs internos ou bibliotecas específicas de outro bounded context.
-

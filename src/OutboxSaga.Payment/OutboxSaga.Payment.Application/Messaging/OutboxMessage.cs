@@ -1,7 +1,7 @@
 using System.Text.Json;
-using OutboxSaga.Orders.Domain.Common;
+using OutboxSaga.Payment.Domain.Common;
 
-namespace OutboxSaga.Orders.Application.Messaging;
+namespace OutboxSaga.Payment.Application.Messaging;
 
 public sealed class OutboxMessage
 {
@@ -23,16 +23,13 @@ public sealed class OutboxMessage
         string? correlationId = null,
         string? causationId = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(aggregateId);
-        ArgumentNullException.ThrowIfNull(domainEvent);
-
         return new OutboxMessage
         {
             AggregateId = aggregateId,
             EventType = domainEvent.GetType().FullName ?? domainEvent.GetType().Name,
             Payload = JsonSerializer.Serialize(domainEvent, domainEvent.GetType(), SerializerOptions),
             OccurredOnUtc = domainEvent.OccurredOnUtc,
-            CorrelationId = correlationId ?? Guid.NewGuid().ToString(),
+            CorrelationId = correlationId,
             CausationId = causationId
         };
     }
