@@ -4,7 +4,7 @@ using Confluent.Kafka;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using OutboxSaga.Shipping.Worker.Contracts;
+using OutboxSaga.Messaging.Events;
 using OutboxSaga.Shipping.Worker.Handlers;
 
 namespace OutboxSaga.Shipping.Worker;
@@ -40,7 +40,7 @@ public class KafkaConsumerService : BackgroundService
                 var result = consumer.Consume(stoppingToken);
                 if (result == null) continue;
 
-                var @event = JsonSerializer.Deserialize<OrderPaidIntegrationEvent>(result.Message.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                var @event = JsonSerializer.Deserialize<OrderPaidEvent>(result.Message.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
                 if (@event != null)
                 {

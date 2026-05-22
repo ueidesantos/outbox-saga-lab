@@ -17,7 +17,7 @@ O padrão SAGA é uma abordagem para gerenciar transações distribuídas em sis
 
 ### 3. Processador de Outbox
 - **Serviço:** Order Outbox Processor (serviço background ou worker)
-- **Responsabilidade:** Ler mensagens não publicadas da Outbox, publicar no AWS MSK (Kafka) e marcar como publicadas.
+- **Responsabilidade:** Ler mensagens não publicadas da Outbox, publicar em um barramento de eventos (ex: Azure Service Bus, Kafka) e marcar como publicadas.
 - **Ação:** Garante entrega confiável dos eventos para outros serviços.
 
 ### 4. Orquestração/Coordenação
@@ -37,7 +37,7 @@ O padrão SAGA é uma abordagem para gerenciar transações distribuídas em sis
 
 ## Diagrama Simplificado
 
-Order API → [Outbox] → Outbox Worker → [AWS MSK] → Coordinator → Payment → FinanceIntegration → Shipping
+Pedido API → [Outbox] → Outbox Processor → [Event Bus] → Coordinator → Payment/Shipping
 
 ## Resumo das Responsabilidades
 - **Order API:** Inicia SAGA, grava pedido e evento na Outbox.
