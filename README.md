@@ -1,265 +1,111 @@
 # Outbox Saga Lab
 
-Um laboratório de arquitetura distribuída em **.NET 10**, criado para estudar, praticar e registrar decisões envolvendo **Clean Architecture**, **DDD**, **Outbox Pattern**, **MongoDB** e uma base evolutiva para **Sagas** em microsserviços.
+Um laboratório de arquitetura distribuída em **.NET 10** e **Python**, criado para estudar, praticar e registrar decisões envolvendo **Clean Architecture**, **DDD**, **Outbox Pattern**, **Saga Orchestration**, **MongoDB** e **AWS MSK (Kafka)**.
 
-A ideia deste projeto é ir um pouco além de uma API CRUD. O foco está em modelar decisões arquiteturais reais: consistência eventual, persistência confiável de eventos, separação de responsabilidades e preparação para comunicação assíncrona entre serviços.
+A ideia deste projeto é ir além de uma API CRUD, modelando decisões arquiteturais reais: consistência eventual, persistência confiável de eventos, isolamento de microsserviços e resiliência em sistemas distribuídos.
 
 ## Objetivo
 
-Este repositório faz parte do meu portfólio técnico e nasceu com uma intenção simples: construir um projeto onde a arquitetura aparece no código, não apenas no desenho.
+Este repositório serve como base de estudo para o papel de **Staff Architect**, onde cada componente é desenhado para suportar falhas parciais e garantir a rastreabilidade total do processo de negócio. O uso de múltiplas linguagens (.NET e Python) demonstra como os padrões arquiteturais se aplicam independentemente da stack tecnológica.
 
-O cenário base é simples:
+O cenário evoluiu para:
 
-- um pedido é criado no serviço de Orders;
-- o domínio levanta eventos;
-- a Application transforma esses eventos em mensagens de outbox;
-- Order e Outbox são persistidos juntos em uma transação;
-- futuramente, um worker publicará essas mensagens em um broker;
-- outros serviços, como Payment e Shipping, poderão reagir e compor uma saga.
-
-```mermaid
-flowchart LR
-    Client[Client/API Consumer] --> API[Orders API]
-    API --> APP[Application Layer]
-    APP --> DOMAIN[Domain Layer]
-    APP --> OUTBOX[Outbox Message]
-    APP --> UOW[Unit of Work]
-    UOW --> MONGO[(MongoDB)]
-    MONGO --> WORKER[Outbox Worker]
-    WORKER --> BUS[Message Broker]
-    BUS --> PAYMENT[Payment Service]
-    BUS --> SHIPPING[Shipping Service]
-    BUS --> COORDINATOR[Saga Coordinator]
-```
-
-## Fluxo De Criação De Pedido
+- **Order Service (C#):** Orquestrador da Saga. Cria o pedido e coordena o fluxo.
+- **Payment Service (C#):** Reage à criação do pedido, processa o pagamento de forma idempotente e registra o resultado via Outbox.
+- **Shipping Service (C#):** Reage ao pagamento aprovado e prepara a logística de entrega.
+- **Financial Integration (Python):** Realiza a escrituração contábil após o pagamento, demonstrando autonomia total (Shared Nothing).
+- **Messaging Service (C#):** Biblioteca de contratos para os serviços .NET. O serviço Python define seus próprios esquemas para evitar acoplamento binário.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant Client
-    participant API as Orders API
-    participant App as CreateOrderHandler
-    participant Domain as Order Aggregate
-    participant Outbox as OutboxMessage
-    participant UoW as Mongo UnitOfWork
-    participant Mongo as MongoDB
+flowchart TD
+    Client[Client/API Consumer] -->|POST /orders| API[Orders API]
 
-    Client->>API: POST /orders
-    API->>App: CreateOrderCommand
-    App->>Domain: new Order(...)
-    Domain-->>App: OrderCreatedDomainEvent
-    App->>Outbox: FromDomainEvent(...)
-    App->>UoW: ExecuteInTransactionAsync
-    UoW->>Mongo: Insert Order
-    UoW->>Mongo: Insert OutboxMessage
-    UoW-->>App: Commit
-    App-->>API: CreateOrderResult
-    API-->>Client: 201 Created
+    subgraph OrderService [Order Microservice - C#]
+        API --> APP_O[Application]
+        APP_O --> DOM_O[Domain]
+        APP_O --> OUT_O[Outbox]
+        UOW_O[Unit of Work] --> MON_O[(MongoDB: OrderDb)]
+        OUT_O --> UOW_O
+        PUB_O[Outbox Publisher] -->|order-created| KAFKA{AWS MSK / Kafka}
+    end
+
+    subgraph PaymentService [Payment Microservice - C#]
+        CON_P[Kafka Consumer] -->|order-created| HAN_P[Payment Handler]
+        HAN_P -->|Idempotency Check| MON_P[(MongoDB: PaymentDb)]
+        HAN_P --> OUT_P[Outbox]
+        PUB_P[Outbox Publisher] -->|payment-processed| KAFKA
+    end
+
+    subgraph FinancialService [Financial Integration - Python]
+        CON_F[Kafka Consumer] -->|payment-processed| HAN_F[Financial Handler]
+        HAN_F -->|Shared Nothing| MON_F[(MongoDB: FinancialDb)]
+        HAN_F --> OUT_F[Outbox]
+        PUB_F[Outbox Publisher] -->|financial-entry-recorded| KAFKA
+    end
+
+    subgraph ShippingService [Shipping Microservice - C#]
+        CON_S[Kafka Consumer] -->|order-paid| HAN_S[Shipping Handler]
+        HAN_S --> MON_S[(MongoDB: ShippingDb)]
+        HAN_S --> OUT_S[Outbox]
+        PUB_S[Outbox Publisher] -->|shipping-arranged| KAFKA
+    end
+
+    KAFKA --> CON_P
+    KAFKA --> CON_F
+    KAFKA -->|Saga Orchestration| CON_O[Order Saga Consumer]
+    KAFKA --> CON_S
 ```
 
-## Decisão Principal: Transactional Outbox
+## Decisões Arquiteturais (Nível Staff)
 
-Em sistemas distribuídos, salvar dados e publicar eventos no broker são duas operações diferentes. Se uma delas falha, o sistema pode ficar inconsistente.
+### 1. Transactional Outbox (Shared Nothing)
+Cada serviço implementa sua própria lógica de Outbox e Publisher. Isso evita o acoplamento por "Shared Library" de infraestrutura. No serviço Python, utilizamos o driver assíncrono `motor` com sessões para manter a paridade com a implementação C#.
 
-Exemplo do problema:
+### 2. Idempotência (Inbox Pattern)
+Como o Kafka garante a entrega *at-least-once*, todos os consumidores realizam uma verificação de idempotência no banco de dados antes de processar qualquer mensagem.
 
-```text
-1. Salva o pedido no banco
-2. Falha antes de publicar OrderCreated no broker
-3. Payment e Shipping nunca ficam sabendo do pedido
-```
+### 3. Distributed Tracing (Correlation & Causation)
+As mensagens trafegam com `CorrelationId` e `CausationId`. O serviço Python extrai esses valores dos Headers do Kafka e os propaga em seus próprios eventos de saída.
 
-O Outbox Pattern resolve isso persistindo o evento no mesmo banco e na mesma transação do aggregate.
+### 4. Resiliência e Polly/Tenacity
+- **C#:** Polly para Retry com Exponential Backoff.
+- **Python:** Tenacity para garantir que a publicação no Kafka suporte falhas transientes do broker.
 
-```text
-Order + OutboxMessage = mesma transação
-```
-
-Depois, um worker independente lê a outbox e publica no broker com retry, controle de falhas e observabilidade.
+### 5. Fat Events & Autonomia
+Os eventos carregam dados ricos. O serviço FinancialIntegration (Python) não conhece as classes C#; ele consome o JSON e valida os dados usando `Pydantic`, mantendo a autonomia total sugerida pelo padrão **Shared Nothing**.
 
 ## Camadas
 
 ```text
 src/
-  OutboxSaga.Order/
-    OutboxSaga.Order.Api/
-    OutboxSaga.Order.Application/
-    OutboxSaga.Order.Domain/
-    OutboxSaga.Order.Infrastructure/
+  OutboxSaga.Messaging/           # Contratos .NET
+  OutboxSaga.Order/               # .NET 10 API
+  OutboxSaga.Payment/             # .NET 10 Worker
+  OutboxSaga.Shipping/            # .NET 10 Worker
+  OutboxSaga.FinancialIntegration/ # Python 3.12+ Worker
+  OutboxSaga.Infrastructure/AWS/  # Terraform para AWS MSK
 ```
 
-### Domain
+## Infraestrutura AWS (MSK)
 
-Contém o modelo de negócio puro.
+Para provisionar o cluster de Kafka na AWS, utilize o Terraform na pasta `src/OutboxSaga.Infrastructure/AWS`:
 
-Responsabilidades:
-
-- aggregates;
-- value objects;
-- domain events;
-- regras e invariantes;
-- transições válidas de estado.
-
-Exemplos:
-
-- `Order`
-- `OrderCustomer`
-- `Money`
-- `OrderStatus`
-- `OrderCreatedDomainEvent`
-
-O domínio não conhece MongoDB, HTTP, Service Bus ou qualquer detalhe externo.
-
-### Application
-
-Orquestra casos de uso.
-
-Responsabilidades:
-
-- receber commands;
-- criar aggregates;
-- coletar domain events;
-- gerar mensagens de outbox;
-- coordenar repositórios e Unit of Work;
-- manter as regras de fluxo da aplicação.
-
-Exemplo:
-
-- `CreateOrderHandler`
-- `CreateOrderCommand`
-- `CreateOrderResult`
-- `ICommandHandler<TCommand, TResult>`
-- `IOutboxRepository`
-- `IUnitOfWork`
-
-### Infrastructure
-
-Implementa detalhes externos.
-
-Responsabilidades:
-
-- MongoDB;
-- repositories;
-- transação;
-- mapeamentos BSON;
-- persistência de Orders;
-- persistência de Outbox Messages.
-
-Exemplos:
-
-- `MongoContext`
-- `MongoUnitOfWork`
-- `MongoOrderRepository`
-- `MongoOutboxRepository`
-- `MongoMappings`
-
-### API
-
-Camada de entrada HTTP.
-
-Responsabilidades:
-
-- endpoints;
-- contratos HTTP;
-- composition root;
-- OpenAPI/Scalar.
-
-A API não deve carregar regra de negócio. Ela traduz request em command e delega para a Application.
-
-## Fluxo De Dependências
-
-```mermaid
-flowchart TD
-    API --> Application
-    Infrastructure --> Application
-    Infrastructure --> Domain
-    Application --> Domain
-
-    Domain -.-> Nothing[Nenhuma dependência externa]
+```bash
+cd src/OutboxSaga.Infrastructure/AWS
+terraform init
+terraform apply
 ```
 
-A regra é simples: o domínio fica no centro.
-
-Infraestrutura depende da aplicação, não o contrário. A Application define portas; a Infrastructure implementa adaptadores.
-
-## MongoDB E Transação
-
-O projeto usa MongoDB para persistir:
-
-- orders;
-- outbox messages.
-
-A transação é coordenada por `MongoUnitOfWork`, garantindo que o pedido e sua mensagem de outbox sejam persistidos juntos.
-
-```mermaid
-flowchart LR
-    Handler[CreateOrderHandler] --> UOW[MongoUnitOfWork]
-    UOW --> S[Mongo Session]
-    S --> O[orders collection]
-    S --> OB[outbox_messages collection]
-    S --> C[Commit]
-```
-
-Observação: transações no MongoDB exigem replica set ou cluster. Em MongoDB Atlas isso já faz sentido para o cenário do projeto.
-
-## Por Que O AggregateRoot Guarda Eventos?
-
-O aggregate é quem sabe quando algo relevante aconteceu no domínio.
-
-Quando um `Order` é criado, ele levanta um `OrderCreatedDomainEvent`. Ele não publica no broker, não serializa JSON e não conhece outbox. Ele apenas registra o fato de domínio.
-
-Isso mantém as responsabilidades bem separadas:
-
-```text
-Domain: aconteceu algo
-Application: transforma em mensagem
-Infrastructure: persiste/publica
-```
+O output `bootstrap_brokers` deve ser copiado para as configurações de `Kafka:BootstrapServers` nos arquivos `appsettings.json` de cada serviço.
 
 ## Stack
 
-- C# / .NET 10
-- ASP.NET Core Minimal APIs
-- MongoDB Driver
-- MongoDB Atlas
-- Clean Architecture
-- DDD
-- Transactional Outbox
-- Base para Saga Pattern
-- Scalar/OpenAPI
-
-## Como Rodar
-
-Configure a connection string do MongoDB em variável de ambiente ou user-secrets.
-
-Exemplo:
-
-```powershell
-dotnet user-secrets set "MongoDb:ConnectionString" "mongodb+srv://user-service-saga-lab:<db_password>@cluster0.lrlk00w.mongodb.net/?appName=Cluster0" --project src/OutboxSaga.Order/OutboxSaga.Order.Api
-dotnet user-secrets set "MongoDb:DatabaseName" "OutboxSagaDb" --project src/OutboxSaga.Order/OutboxSaga.Order.Api
-```
-
-Depois:
-
-```powershell
-dotnet build src/OutboxSaga.Order/OutboxSaga.Order.Api/OutboxSaga.Orders.Api.csproj
-dotnet run --project src/OutboxSaga.Order/OutboxSaga.Order.Api/OutboxSaga.Orders.Api.csproj
-```
-
-## Próximos Passos
-
-- Implementar o Outbox Worker.
-- Publicar eventos em um broker.
-- Adicionar Payment Service.
-- Adicionar Shipping Service.
-- Evoluir o Saga Coordinator.
-- Adicionar retries e dead-letter strategy.
-- Adicionar observabilidade com logs estruturados, tracing e métricas.
-- Criar testes de domínio, application e integração.
+- **Linguagens:** C# (.NET 10), Python (3.12+)
+- **Bancos:** MongoDB Atlas (Transacional)
+- **Mensageria:** AWS MSK / Confluent Kafka
+- **IaC:** Terraform
+- **Libs Python:** motor, confluent-kafka, pydantic, tenacity
 
 ## Status
 
-Projeto em evolução.
-
-A base atual já cobre o fluxo de criação de pedido com persistência transacional em MongoDB e registro de mensagens na outbox. O próximo grande passo é processar a outbox e iniciar a comunicação assíncrona entre serviços.
+**Fase 3 Concluída:** Introdução de poliglotismo com o serviço de Financial Integration em Python. Infraestrutura AWS MSK preparada via Terraform.
