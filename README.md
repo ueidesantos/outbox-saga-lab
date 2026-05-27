@@ -83,29 +83,15 @@ src/
   OutboxSaga.Payment/             # .NET 10 Worker
   OutboxSaga.Shipping/            # .NET 10 Worker
   OutboxSaga.FinancialIntegration/ # Python 3.12+ Worker
-  OutboxSaga.Infrastructure/AWS/  # Terraform para AWS MSK
 ```
-
-## Infraestrutura AWS (MSK)
-
-Para provisionar o cluster de Kafka na AWS, utilize o Terraform na pasta `src/OutboxSaga.Infrastructure/AWS`:
-
-```bash
-cd src/OutboxSaga.Infrastructure/AWS
-terraform init
-terraform apply
-```
-
-O output `bootstrap_brokers` deve ser copiado para as configurações de `Kafka:BootstrapServers` nos arquivos `appsettings.json` de cada serviço.
 
 ## Stack
 
 - **Linguagens:** C# (.NET 10), Python (3.12+)
 - **Bancos:** MongoDB Atlas (Transacional)
 - **Mensageria:** AWS MSK / Confluent Kafka
-- **IaC:** Terraform
 - **Libs Python:** motor, confluent-kafka, pydantic, tenacity
 
 ## Status
 
-**Fase 3 Concluída:** Introdução de poliglotismo com o serviço de Financial Integration em Python. Infraestrutura AWS MSK preparada via Terraform.
+**Fase 3 Concluída:** Introdução de poliglotismo com o serviço de Financial Integration em Python. Padrões de resiliência e tracing validados entre stacks diferentes.
